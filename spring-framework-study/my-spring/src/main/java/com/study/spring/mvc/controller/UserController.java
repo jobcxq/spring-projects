@@ -4,10 +4,12 @@ import com.study.spring.framework.annotation.Autowired;
 import com.study.spring.framework.annotation.Controller;
 import com.study.spring.framework.annotation.RequestMapping;
 import com.study.spring.framework.annotation.RequestParam;
+import com.study.spring.mvc.model.User;
 import com.study.spring.mvc.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.servlet.http.HttpServletRequest;
 import java.util.List;
 
 /**
@@ -33,8 +35,14 @@ public class UserController {
 
 
     @RequestMapping("/queryAllUser")
-    public String queryAllUser(){
-        return userService.queryAllUser().toString();
+    public List<User> queryAllUser(){
+        return userService.queryAllUser();
     }
+
+    @RequestMapping("/queryAllUser")
+    public User getUserById(HttpServletRequest request, @RequestParam("id") Long id){
+        return userService.getUserById(id);
+    }
+
 
 }
