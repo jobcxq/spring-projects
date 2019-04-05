@@ -39,7 +39,7 @@ public class UserController {
         return userService.queryAllUser();
     }
 
-    @RequestMapping("/queryAllUser")
+    @RequestMapping("/getUserById")
     public User getUserById(HttpServletRequest request, @RequestParam("id") Long id){
         return userService.getUserById(id);
     }

@@ -18,6 +18,8 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * @author cnxqin
@@ -37,7 +39,8 @@ public class DispatcherServlet extends HttpServlet {
     private Map<String,Object> ioc = new HashMap<>();
 
     //请求地址映射
-    private Map<String,Method> handlerMapping = new HashMap<>();
+//    private Map<String,Method> handlerMapping = new HashMap<>();
+    private List<HandlerMapping> handlerMappings = new ArrayList<>();
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
@@ -56,29 +59,60 @@ public class DispatcherServlet extends HttpServlet {
 
     }
 
+    @Override
+    public void destroy() {
+        super.destroy();
+        log.info("\n**********My Spring framework is destroy.");
+    }
+
     private void doDispatch(HttpServletRequest req, HttpServletResponse resp) throws Exception{
 
+        HandlerMapping handlerMapping = getHandlerMapping(getRequestUrl(req));
+        
+//        if(!this.handlerMapping.containsKey(url)){
+        if(handlerMapping == null){
+            resp.getWriter().write("404 Not Found!!!");
+            return;
+        }
+
+//        Method method = this.handlerMapping.get(url);
+
+        //构造参数
+//        Object [] paramValues = constructParameter(req,resp,method);
+        Object [] paramValues = constructParameter(req,resp,handlerMapping);
+        //反射调用
+//        Object result = method.invoke(ioc.get(getBeanName(method.getDeclaringClass())),paramValues);
+        Object result = handlerMapping.getMethod().invoke(handlerMapping.getController(),paramValues);
+
+        resp.setCharacterEncoding("UTF-8");
+        resp.setHeader("Content-type", "text/html;charset=UTF-8");
+        resp.getWriter().write(result != null ? result.toString() : "NO result return!");
+    }
+
+    /**
+     * 获取请求的相对路径
+     * @param req
+     * @return
+     */
+    private String getRequestUrl(HttpServletRequest req){
         //获取绝对路径
         String url = req.getRequestURI();
         //获取相对路径
         String contextPath = req.getContextPath();
         url = url.replaceAll(contextPath,"").replaceAll("/+","/");
+        return url;
+    }
 
-        if(!this.handlerMapping.containsKey(url)){
-            resp.getWriter().write("404 Not Found!!!");
-            return;
+    private HandlerMapping getHandlerMapping(String url) {
+        if(handlerMappings.isEmpty()){return null;}
+
+        for (HandlerMapping handler : this.handlerMappings) {
+            Matcher matcher = handler.getPattern().matcher(url);
+            if(matcher.matches()){
+                return handler;
+            }
         }
-
-        Method method = this.handlerMapping.get(url);
-
-        //构造参数
-        Object [] paramValues = constructParameter(req,resp,method);
-        //反射调用
-        Object result = method.invoke(ioc.get(getBeanName(method.getDeclaringClass())),paramValues);
-
-        resp.setCharacterEncoding("UTF-8");
-        resp.setHeader("Content-type", "text/html;charset=UTF-8");
-        resp.getWriter().write(result != null ? result.toString() : "Hello World!");
+        return null;
     }
 
     @Override
@@ -100,9 +134,40 @@ public class DispatcherServlet extends HttpServlet {
         //5、初始化HandlerMapping
         initHandlerMapping();
 
-        log.info("My Spring framework is started.");
+        log.info("\n***********************************************************" +
+                "\n**********My Spring framework started successful.**********" +
+                "\n***********************************************************");
     }
 
+    private Object[] constructParameter(HttpServletRequest req, HttpServletResponse resp,
+                                        HandlerMapping handlerMapping) {
+        //获取方法的形参列表
+        Class<?> [] parameterTypes = handlerMapping.getParameterTypes();
+        Object [] paramValues = new Object[parameterTypes.length];  //方法的实参
+        Map<String,String[]> requestMap =  req.getParameterMap(); //请求参数
+
+        for (Map.Entry<String, String[]> entry : requestMap.entrySet()) {
+            if(handlerMapping.getParamIndexMapping().containsKey(entry.getKey())){
+                Integer index = handlerMapping.getParamIndexMapping().get(entry.getKey());
+                String value = Arrays.toString(entry.getValue()).replaceAll("\\[|\\]","")
+                        .replaceAll("\\s",",");
+                paramValues[index] = convert(parameterTypes[index],value);//装换为指定的类型
+            }
+        }
+        if(handlerMapping.getParamIndexMapping().containsKey(req.getClass().getName())){
+            Integer index = handlerMapping.getParamIndexMapping().get(req.getClass().getName());
+            paramValues[index] = req;
+        }
+        if(handlerMapping.getParamIndexMapping().containsKey(resp.getClass().getName())){
+            Integer index = handlerMapping.getParamIndexMapping().get(resp.getClass().getName());
+            paramValues[index] = resp;
+        }
+
+        return paramValues;
+
+    }
+
+    @Deprecated
     private Object[] constructParameter(HttpServletRequest req, HttpServletResponse resp, Method method) {
         //获取方法的形参列表
         Class<?> [] parameterTypes = method.getParameterTypes();
@@ -150,9 +215,10 @@ public class DispatcherServlet extends HttpServlet {
     private Object convert(Class<?> type,String value){
         if(Integer.class == type){
             return Integer.valueOf(value);
-        }
-        else if(Double.class == type){
+        }else if(Double.class == type){
             return Double.valueOf(value);
+        }else if(Long.class == type){
+            return Long.valueOf(value);
         }
         //需要使用策略模式
         return value;
@@ -180,7 +246,16 @@ public class DispatcherServlet extends HttpServlet {
                 RequestMapping requestMapping = method.getDeclaredAnnotation(RequestMapping.class);
                 //组装相对的请求url地址，并去掉多余/
                 String url = (baseUrl + "/" + requestMapping.value()).replaceAll("/+","/");
-                handlerMapping.put(url,method);
+
+                Pattern pattern = Pattern.compile(url);
+                if(null != getHandlerMapping(url)){
+                    String message = "the request url [" + url + "] is existed.";
+                    log.error(message);
+                    throw new RuntimeException(message);
+                }
+                handlerMappings.add(new HandlerMapping(pattern,method,entry.getValue()));
+//                handlerMapping.put(url,method);
+
                 log.info("add handler Mapping, url:{}, method：{}",url,method);
             }
         }
