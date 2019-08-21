@@ -230,7 +230,7 @@ public class DispatcherServlet extends HttpServlet {
         for(Map.Entry<String, Object> entry : ioc.entrySet()){
             Class<?> clazz = entry.getValue().getClass();
             //首先需要时一个Controller
-            if(!clazz.isAnnotationPresent(Controller.class)){ return; }
+            if(!clazz.isAnnotationPresent(Controller.class)){ continue; }
 
             String baseUrl  = "/";
             //注解在类上的路径
@@ -242,7 +242,7 @@ public class DispatcherServlet extends HttpServlet {
             //获取所有public方法，及其 RequestMapping注解
             Method[] methods = clazz.getMethods();
             for(Method method : methods){
-                if(!method.isAnnotationPresent(RequestMapping.class)){ return;}
+                if(!method.isAnnotationPresent(RequestMapping.class)){ continue;}
                 RequestMapping requestMapping = method.getDeclaredAnnotation(RequestMapping.class);
                 //组装相对的请求url地址，并去掉多余/
                 String url = (baseUrl + "/" + requestMapping.value()).replaceAll("/+","/");
